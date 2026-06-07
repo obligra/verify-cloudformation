@@ -1,0 +1,11 @@
+.DS_Store
+*.swp
+*.swo
+.env
+.env.*
+node_modules/
+coverage/
+.cfn-lint/
+.aws-sam/
+dist/
+build/

@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "VerifyApiKey",
+    "ParameterValue": "obv_sandbox_YOURPREFIX.YOURSECRETVALUE"
+  },
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "sandbox"
+  },
+  {
+    "ParameterKey": "AllowedOrigins",
+    "ParameterValue": "https://app.yourcompany.com,http://localhost:3000"
+  },
+  {
+    "ParameterKey": "LogRetentionDays",
+    "ParameterValue": "14"
+  }
+]

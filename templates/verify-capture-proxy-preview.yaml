@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Obligra Verify Capture Proxy (Early Preview).
+  Deploys a customer-owned serverless relay that forwards decision record
+  capture requests to the Obligra Verify API.
+
+Parameters:
+  VerifyApiBaseUrl:
+    Type: String
+    Default: https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
+    Description: Base URL of the Obligra Verify capture API.
+
+  VerifyApiKey:
+    Type: String
+    NoEcho: true
+    Description: Obligra Verify API key. Stored encrypted. Never logged.
+
+  EnvironmentName:
+    Type: String
+    Default: sandbox
+    AllowedValues:
+      - sandbox
+      - dev
+      - staging
+      - production
+    Description: Environment label for tagging and logging context.
+
+  AllowedOrigins:
+    Type: String
+    Default: '*'
+    Description: >
+      Comma-separated list of allowed CORS origins.
+      Use '*' for development only. Restrict in production.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90]
+    Description: CloudWatch log retention in days.
+
+Resources:
+
+  # ─── Lambda Execution Role ───────────────────────────────────────────────────
+
+  ProxyFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'verify-capture-proxy-${EnvironmentName}-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchLogsOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/verify-capture-proxy-${EnvironmentName}:*'
+
+  # ─── Lambda Function ─────────────────────────────────────────────────────────
+
+  ProxyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'verify-capture-proxy-${EnvironmentName}'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 15
+      Role: !GetAtt ProxyFunctionRole.Arn
+      Environment:
+        Variables:
+          VERIFY_API_BASE_URL: !Ref VerifyApiBaseUrl
+          VERIFY_API_KEY: !Ref VerifyApiKey
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+      Code:
+        ZipFile: |
+          const https = require('https');
+          const url = require('url');
+
+          const VERIFY_URL = process.env.VERIFY_API_BASE_URL;
+          const API_KEY = process.env.VERIFY_API_KEY;
+          const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim());
+
+          exports.handler = async (event) => {
+            const start = Date.now();
+            const requestId = event.requestContext?.requestId || 'unknown';
+            const method = event.requestContext?.http?.method || event.httpMethod;
+            const origin = event.headers?.origin || event.headers?.Origin || '';
+
+            // CORS preflight
+            if (method === 'OPTIONS') {
+              return corsResponse(204, '', origin);
+            }
+
+            // Only allow POST
+            if (method !== 'POST') {
+              log({ requestId, action: 'rejected', reason: 'method_not_allowed' });
+              return corsResponse(405, JSON.stringify({ error: 'method_not_allowed' }), origin);
+            }
+
+            // Parse and validate body
+            let body;
+            try {
+              body = JSON.parse(event.body || '{}');
+            } catch {
+              log({ requestId, action: 'rejected', reason: 'invalid_json' });
+              return corsResponse(400, JSON.stringify({ error: 'invalid_json' }), origin);
+            }
+
+            if (!body.workflowId) {
+              log({ requestId, action: 'rejected', reason: 'missing_workflow_id' });
+              return corsResponse(400, JSON.stringify({ error: 'missing_workflow_id', message: 'workflowId is required' }), origin);
+            }
+
+            // Forward to Verify API
+            try {
+              const result = await forwardToVerify(JSON.stringify(body));
+              const duration = Date.now() - start;
+              log({ requestId, action: 'forwarded', workflowId: body.workflowId, statusCode: result.statusCode, durationMs: duration });
+              return corsResponse(result.statusCode, result.body, origin);
+            } catch (err) {
+              const duration = Date.now() - start;
+              log({ requestId, action: 'error', workflowId: body.workflowId, errorCode: err.code || 'PROXY_ERROR', durationMs: duration });
+              return corsResponse(502, JSON.stringify({ error: 'proxy_error', message: 'Failed to reach Verify API' }), origin);
+            }
+          };
+
+          function forwardToVerify(payload) {
+            return new Promise((resolve, reject) => {
+              const target = new URL(VERIFY_URL + '/decision-records');
+              const options = {
+                hostname: target.hostname,
+                port: 443,
+                path: target.pathname,
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Verify-Api-Key': API_KEY,
+                  'Content-Length': Buffer.byteLength(payload),
+                },
+                timeout: 10000,
+              };
+
+              const req = https.request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => { resolve({ statusCode: res.statusCode, body: data }); });
+              });
+
+              req.on('error', reject);
+              req.on('timeout', () => { req.destroy(); reject(new Error('TIMEOUT')); });
+              req.write(payload);
+              req.end();
+            });
+          }
+
+          function corsResponse(statusCode, body, origin) {
+            const allowOrigin = ALLOWED_ORIGINS.includes('*') ? '*' : (ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+            return {
+              statusCode,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowOrigin,
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+              },
+              body: body || '',
+            };
+          }
+
+          function log(fields) {
+            // SECURITY: Never log payloads, API keys, prompts, responses, or customer data.
+            // Only sanitized operational metadata.
+            console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: 'verify-capture-proxy', ...fields }));
+          }
+
+  # ─── CloudWatch Log Group ────────────────────────────────────────────────────
+
+  ProxyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/verify-capture-proxy-${EnvironmentName}'
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ─── API Gateway (HTTP API) ──────────────────────────────────────────────────
+
+  ProxyHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'verify-capture-proxy-${EnvironmentName}'
+      ProtocolType: HTTP
+      Description: Customer-owned Verify capture proxy endpoint
+
+  ProxyIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ProxyHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ProxyFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  ProxyRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ProxyHttpApi
+      RouteKey: 'POST /decision-records'
+      Target: !Sub 'integrations/${ProxyIntegration}'
+
+  ProxyCorsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ProxyHttpApi
+      RouteKey: 'OPTIONS /decision-records'
+      Target: !Sub 'integrations/${ProxyIntegration}'
+
+  ProxyStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ProxyHttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  ProxyFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProxyFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ProxyHttpApi}/*'
+
+Outputs:
+  ProxyEndpoint:
+    Description: Customer-owned capture proxy endpoint URL
+    Value: !Sub 'https://${ProxyHttpApi}.execute-api.${AWS::Region}.amazonaws.com/decision-records'
+
+  ProxyFunctionName:
+    Description: Lambda function name
+    Value: !Ref ProxyFunction
+
+  ProxyFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt ProxyFunction.Arn
