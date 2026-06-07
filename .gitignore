@@ -9,3 +9,9 @@ coverage/
 .aws-sam/
 dist/
 build/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.build/
