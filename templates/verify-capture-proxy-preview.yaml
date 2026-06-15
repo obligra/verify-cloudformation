@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Obligra Verify Capture Proxy (Early Preview).
-  Deploys a customer-owned serverless relay that forwards decision record
-  capture requests to the Obligra Verify API.
+  Deploys a customer-owned serverless relay with a capture policy engine
+  that controls what data leaves the customer account before forwarding
+  to the Obligra Verify API.
 
 Parameters:
   VerifyApiBaseUrl:
@@ -27,6 +28,14 @@ Parameters:
       - staging
       - production
     Description: Environment label for tagging and logging context.
+
+  CapturePolicyJson:
+    Type: String
+    Default: ''
+    Description: >
+      JSON capture policy controlling what data is forwarded to Verify.
+      If empty, defaults to forward_all mode (pass-through).
+      Must not contain secrets. See examples/capture-policy-basic.json.
 
   AllowedOrigins:
     Type: String
@@ -85,14 +94,124 @@ Resources:
           VERIFY_API_KEY: !Ref VerifyApiKey
           ENVIRONMENT_NAME: !Ref EnvironmentName
           ALLOWED_ORIGINS: !Ref AllowedOrigins
+          CAPTURE_POLICY_JSON: !Ref CapturePolicyJson
       Code:
         ZipFile: |
           const https = require('https');
-          const url = require('url');
 
           const VERIFY_URL = process.env.VERIFY_API_BASE_URL;
           const API_KEY = process.env.VERIFY_API_KEY;
           const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim());
+
+          // ─── Capture Policy Engine ───────────────────────────────────────────
+          let POLICY = { mode: 'forward_all' };
+          try {
+            const raw = process.env.CAPTURE_POLICY_JSON;
+            if (raw && raw.trim()) POLICY = JSON.parse(raw);
+          } catch (e) {
+            console.error(JSON.stringify({ service: 'verify-capture-proxy', event: 'policy_parse_error', message: e.message }));
+          }
+
+          function applyPolicy(body) {
+            if (!POLICY || POLICY.mode === 'forward_all') return body;
+
+            const cap = POLICY.capture || {};
+            const sec = POLICY.security || {};
+            const neverForward = new Set((sec.neverForward || []).map(k => k.toLowerCase()));
+
+            // Start building filtered payload
+            const result = { workflowId: body.workflowId };
+
+            // intent_only: workflowId + model only
+            if (POLICY.mode === 'intent_only') {
+              if (body.model && cap.model !== false) {
+                result.model = {};
+                if (body.model.provider && (cap.model?.includeProvider !== false)) result.model.provider = body.model.provider;
+                if (body.model.modelId && (cap.model?.includeModelId !== false)) result.model.modelId = body.model.modelId;
+              }
+              result.operationalContext = { captureMode: 'intent_only' };
+              return result;
+            }
+
+            // policy mode: explicit field control
+            const ctx = body.operationalContext || {};
+            const filteredCtx = {};
+            const ctxPolicy = cap.operationalContext || {};
+            const allowedKeys = ctxPolicy.allowedKeys ? new Set(ctxPolicy.allowedKeys) : null;
+            const redactedKeys = new Set((ctxPolicy.redactedKeys || []).map(k => k.toLowerCase()));
+            const dropUnknown = ctxPolicy.dropUnknownKeys === true;
+            const maxValueLen = ctxPolicy.maxValueLength || 1024;
+            let droppedCount = 0;
+            let redactedCount = 0;
+
+            for (const [key, value] of Object.entries(ctx)) {
+              const keyLower = key.toLowerCase();
+
+              // Security: never forward
+              if (neverForward.has(keyLower)) { droppedCount++; continue; }
+
+              // Skip prompt/response here — handled separately
+              if (key === 'prompt' || key === 'response') continue;
+
+              // Redacted keys
+              if (redactedKeys.has(keyLower)) { redactedCount++; continue; }
+
+              // Allowed keys filter
+              if (allowedKeys && !allowedKeys.has(key)) {
+                if (dropUnknown) { droppedCount++; continue; }
+              }
+
+              // Truncate value
+              const strVal = typeof value === 'string' ? value : JSON.stringify(value);
+              filteredCtx[key] = strVal.slice(0, maxValueLen);
+            }
+
+            // Handle prompt
+            const promptPolicy = cap.prompt || {};
+            if (promptPolicy.allow !== false) {
+              const promptVal = ctx.prompt || body.prompt || '';
+              if (promptVal) {
+                const maxLen = promptPolicy.maxLength || 512;
+                filteredCtx.prompt = promptVal.slice(0, maxLen);
+              }
+            } else { droppedCount++; }
+
+            // Handle response
+            const responsePolicy = cap.response || {};
+            if (responsePolicy.allow !== false) {
+              const responseVal = ctx.response || body.response || '';
+              if (responseVal) {
+                const maxLen = responsePolicy.maxLength || 512;
+                filteredCtx.response = responseVal.slice(0, maxLen);
+              }
+            } else { droppedCount++; }
+
+            result.operationalContext = filteredCtx;
+
+            // Model
+            if (body.model) {
+              result.model = {};
+              const modelPolicy = cap.model || {};
+              if (body.model.provider && modelPolicy.includeProvider !== false) result.model.provider = body.model.provider;
+              if (body.model.modelId && modelPolicy.includeModelId !== false) result.model.modelId = body.model.modelId;
+            }
+
+            // Also strip neverForward from top-level
+            for (const key of Object.keys(result)) {
+              if (neverForward.has(key.toLowerCase()) && key !== 'workflowId') {
+                delete result[key]; droppedCount++;
+              }
+            }
+
+            // Log redaction metadata only (never values)
+            if ((sec.logRedactions !== false) && (droppedCount > 0 || redactedCount > 0)) {
+              log({ event: 'policy_applied', mode: POLICY.mode, droppedFields: droppedCount, redactedFields: redactedCount });
+            }
+
+            return result;
+          }
+
+          // ─── Handler ─────────────────────────────────────────────────────────
 
           exports.handler = async (event) => {
             const start = Date.now();
@@ -100,22 +219,15 @@ Resources:
             const method = event.requestContext?.http?.method || event.httpMethod;
             const origin = event.headers?.origin || event.headers?.Origin || '';
 
-            // CORS preflight
-            if (method === 'OPTIONS') {
-              return corsResponse(204, '', origin);
-            }
+            if (method === 'OPTIONS') return corsResponse(204, '', origin);
 
-            // Only allow POST
             if (method !== 'POST') {
               log({ requestId, action: 'rejected', reason: 'method_not_allowed' });
               return corsResponse(405, JSON.stringify({ error: 'method_not_allowed' }), origin);
             }
 
-            // Parse and validate body
             let body;
-            try {
-              body = JSON.parse(event.body || '{}');
-            } catch {
+            try { body = JSON.parse(event.body || '{}'); } catch {
               log({ requestId, action: 'rejected', reason: 'invalid_json' });
               return corsResponse(400, JSON.stringify({ error: 'invalid_json' }), origin);
             }
@@ -125,11 +237,13 @@ Resources:
               return corsResponse(400, JSON.stringify({ error: 'missing_workflow_id', message: 'workflowId is required' }), origin);
             }
 
-            // Forward to Verify API
+            // Apply capture policy
+            const filteredBody = applyPolicy(body);
+
             try {
-              const result = await forwardToVerify(JSON.stringify(body));
+              const result = await forwardToVerify(JSON.stringify(filteredBody));
               const duration = Date.now() - start;
-              log({ requestId, action: 'forwarded', workflowId: body.workflowId, statusCode: result.statusCode, durationMs: duration });
+              log({ requestId, action: 'forwarded', workflowId: body.workflowId, policyMode: POLICY.mode, statusCode: result.statusCode, durationMs: duration });
               return corsResponse(result.statusCode, result.body, origin);
             } catch (err) {
               const duration = Date.now() - start;
@@ -137,6 +251,8 @@ Resources:
               return corsResponse(502, JSON.stringify({ error: 'proxy_error', message: 'Failed to reach Verify API' }), origin);
             }
           };
+
+          // ─── Forward ─────────────────────────────────────────────────────────
 
           function forwardToVerify(payload) {
             return new Promise((resolve, reject) => {
@@ -153,13 +269,11 @@ Resources:
                 },
                 timeout: 10000,
               };
-
               const req = https.request(options, (res) => {
                 let data = '';
                 res.on('data', (chunk) => { data += chunk; });
                 res.on('end', () => { resolve({ statusCode: res.statusCode, body: data }); });
               });
-
               req.on('error', reject);
               req.on('timeout', () => { req.destroy(); reject(new Error('TIMEOUT')); });
               req.write(payload);
@@ -167,23 +281,19 @@ Resources:
             });
           }
 
+          // ─── Utilities ───────────────────────────────────────────────────────
+
           function corsResponse(statusCode, body, origin) {
             const allowOrigin = ALLOWED_ORIGINS.includes('*') ? '*' : (ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
             return {
               statusCode,
-              headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': allowOrigin,
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-              },
+              headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': allowOrigin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' },
               body: body || '',
             };
           }
 
           function log(fields) {
             // SECURITY: Never log payloads, API keys, prompts, responses, or customer data.
-            // Only sanitized operational metadata.
             console.log(JSON.stringify({ timestamp: new Date().toISOString(), service: 'verify-capture-proxy', ...fields }));
           }
 
@@ -202,7 +312,7 @@ Resources:
     Properties:
       Name: !Sub 'verify-capture-proxy-${EnvironmentName}'
       ProtocolType: HTTP
-      Description: Customer-owned Verify capture proxy endpoint
+      Description: Customer-owned Verify capture proxy with capture policy engine
 
   ProxyIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -253,3 +363,13 @@ Outputs:
   ProxyFunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt ProxyFunction.Arn
+
+  CaptureMode:
+    Description: Active capture policy mode
+    Value: !If
+      - HasPolicy
+      - policy
+      - forward_all
+
+Conditions:
+  HasPolicy: !Not [!Equals [!Ref CapturePolicyJson, '']]
