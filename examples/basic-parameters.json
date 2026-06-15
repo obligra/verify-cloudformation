@@ -1,5 +1,9 @@
 [
   {
+    "ParameterKey": "VerifyApiBaseUrl",
+    "ParameterValue": "https://verify-console.emergent.host/api/v1"
+  },
+  {
     "ParameterKey": "VerifyApiKey",
     "ParameterValue": "obv_sandbox_YOURPREFIX.YOURSECRETVALUE"
   },
@@ -9,7 +13,7 @@
   },
   {
     "ParameterKey": "AllowedOrigins",
-    "ParameterValue": "https://app.yourcompany.com,http://localhost:3000"
+    "ParameterValue": "*"
   },
   {
     "ParameterKey": "LogRetentionDays",

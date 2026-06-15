@@ -75,7 +75,7 @@
 2. Verify the `VerifyApiBaseUrl` parameter is correct
 3. Test connectivity from your account:
    ```bash
-   curl -s -o /dev/null -w "%{http_code}" https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev/health
+   curl -s -o /dev/null -w "%{http_code}" https://verify-console.emergent.host/api/v1/health
    ```
 4. If the Verify API is down, retry later or contact support
 
