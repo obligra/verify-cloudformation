@@ -5,7 +5,7 @@
 - AWS CLI configured with appropriate credentials
 - An AWS account where you want to deploy the proxy
 - An Obligra Verify API key (generate via the Verify Console or SDK)
-- `CAPABILITY_IAM` permission to create IAM roles
+- `CAPABILITY_NAMED_IAM` permission to create IAM roles
 
 ## Deploy
 
@@ -19,7 +19,7 @@ aws cloudformation deploy \
     VerifyApiKey=obv_sandbox_YOURPREFIX.YOURSECRET \
     EnvironmentName=sandbox \
     AllowedOrigins="https://app.yourcompany.com,http://localhost:3000" \
-  --capabilities CAPABILITY_IAM \
+  --capabilities CAPABILITY_NAMED_IAM \
   --region us-east-1
 ```
 
@@ -30,7 +30,7 @@ aws cloudformation deploy \
   --template-file templates/verify-capture-proxy-preview.yaml \
   --stack-name verify-capture-proxy \
   --parameter-overrides file://examples/basic-parameters.json \
-  --capabilities CAPABILITY_IAM \
+  --capabilities CAPABILITY_NAMED_IAM \
   --region us-east-1
 ```
 
@@ -81,7 +81,7 @@ aws cloudformation deploy \
   --parameter-overrides \
     VerifyApiKey=obv_sandbox_NEWPREFIX.NEWSECRET \
     EnvironmentName=sandbox \
-  --capabilities CAPABILITY_IAM
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
 ## Delete the Stack

@@ -34,7 +34,7 @@ The Verify capture proxy is a lightweight, customer-owned serverless relay that 
 
 - AWS CLI configured with credentials for your target account
 - An Obligra Verify API key (create in the Verify Console)
-- `CAPABILITY_IAM` permission
+- `CAPABILITY_NAMED_IAM` permission to create named IAM roles
 
 ### Deploy
 
@@ -46,7 +46,7 @@ aws cloudformation deploy \
     VerifyApiBaseUrl=https://verify-console.emergent.host/api/v1 \
     VerifyApiKey=obv_sandbox_YOUR_PREFIX.YOUR_SECRET \
     EnvironmentName=sandbox \
-  --capabilities CAPABILITY_IAM \
+  --capabilities CAPABILITY_NAMED_IAM \
   --region us-west-2
 ```
 
