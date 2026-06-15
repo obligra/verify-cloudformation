@@ -185,8 +185,11 @@ These are hosted by Obligra and accessed over HTTPS:
 | CloudWatch log safety | ✅ Validated |
 | Verify Console record visibility | ✅ Validated |
 | Terraform template syntax | ✅ Validated (HCL) |
-| Terraform live deploy | ⏳ Pending (TF-VAL-001) |
-| External customer account (063088900096) | ⏳ Pending (CF-CUST-001) |
+| Terraform live deploy | ✅ Validated (account 171376498317, us-west-2) |
+| Terraform capture policy | ✅ Validated (allow/drop/neverForward) |
+| Terraform log safety | ✅ Validated (no sensitive data in logs) |
+| Terraform verification | ✅ Validated (hashMatches + signatureValid) |
+| Customer test account (171376498317) | ✅ Validated |
 
 ## 12. Preview URLs vs Future Production Domains
 
