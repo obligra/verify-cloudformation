@@ -1,141 +1,303 @@
-# Troubleshooting
+# Troubleshooting Verify Integrations
 
-## Common Issues
+This guide covers common deployment, validation, and integration issues for the Obligra Verify capture proxy.
 
-### 401 — Invalid API Key
+---
 
-**Symptom:** Proxy returns `{"error":"unauthorized","message":"Invalid API key."}`
+## Before You Troubleshoot
 
-**Causes:**
-- API key parameter is incorrect
-- API key has been revoked
-- API key format is malformed
+Before investigating any issue, confirm these basics:
+
+| Check | How |
+|-------|-----|
+| Correct AWS account | `aws sts get-caller-identity` |
+| Correct Verify environment | Check `VerifyApiBaseUrl` parameter in your stack |
+| API key is valid | Not revoked, not expired, full key (prefix + secret) |
+| Workspace matches | Same workspace as your console login |
+| `decisionRecordId` was returned | Check the HTTP 201 response body |
+| Correct API endpoint | Preview URL vs production URL |
+
+---
+
+## Record Never Appears in Verify
+
+**Symptoms:**
+- HTTP 201 returned from the proxy
+- `decisionRecordId` returned in the response
+- Record not visible in the Verify Console
+
+**Possible causes:**
+
+| Cause | Resolution |
+|-------|-----------|
+| Wrong environment | Confirm `VerifyApiBaseUrl` points to the correct Verify environment |
+| Wrong workspace | Your console user may be viewing a different workspace than the API key's workspace |
+| Wrong user/tenant | The API key belongs to a specific tenant — ensure your console login is the same tenant |
+| Policy skipped the record | Check if `CapturePolicyJson` has rules that would filter the payload |
+| API base URL mismatch | Preview URL and production URL are different environments with separate databases |
+
+**Resolution steps:**
+1. Copy the `decisionRecordId` from the proxy response
+2. Log into the Verify Console with the same account that owns the API key
+3. Search by `decisionRecordId` directly
+4. If not found, verify the API base URL matches your console environment
+
+---
+
+## Record Appears But Search Fails
+
+**Check these fields:**
+- `decisionRecordId` — exact ID from the capture response
+- `workflowId` — must match what was sent in the payload
+- Retrieval keys — search uses these for filtering
+- Environment filter — console may be filtering by environment
+- User scope — your user must belong to the same tenant/workspace
+
+---
+
+## Invalid API Key
+
+**Symptoms:**
+- HTTP 401 from the Verify API
+- Proxy logs show `statusCode: 401`
+
+**Common causes:**
+
+| Cause | Fix |
+|-------|-----|
+| Revoked key | Generate a new key in the Verify Console |
+| Copied prefix only | The full key format is `obv_{prefix}.{secret}` — both parts are required |
+| Wrong environment | Keys are environment-specific — a dev key won't work against production |
+| Whitespace | Ensure no leading/trailing spaces in your parameter value |
+| Expired or rotated | Check key status in the Verify Console |
+
+---
+
+## Lost API Key Secret
+
+The API key secret is displayed **once** at creation time. It cannot be retrieved again.
 
 **Resolution:**
-1. Verify the key is active in the Verify Console
-2. Confirm the full key value (prefix + secret) is passed to the stack
-3. Redeploy the stack with the correct key:
-   ```bash
-   aws cloudformation deploy \
-     --template-file templates/verify-capture-proxy-preview.yaml \
-     --stack-name verify-capture-proxy \
-     --parameter-overrides VerifyApiKey=obv_sandbox_CORRECT.KEYVALUE \
-     --capabilities CAPABILITY_IAM
-   ```
-4. Check Lambda environment variables (key value is hidden but confirm it was updated by checking `LastModified`)
+1. Generate a new API key in the Verify Console
+2. Update the stack with the new key: `aws cloudformation update-stack ... --parameter-overrides VerifyApiKey=new_key`
+3. Revoke the old key in the Verify Console
 
-### 403 — CORS Blocked
+---
 
-**Symptom:** Browser console shows `Access-Control-Allow-Origin` error
+## Capture Policy Skipped Record
 
-**Causes:**
-- `AllowedOrigins` parameter does not include your application's origin
-- Origin header not sent in the request
+**Symptoms:**
+- Proxy returns a response but with unexpected content
+- Record is missing fields or not created
 
-**Resolution:**
-1. Update `AllowedOrigins` to include your domain:
-   ```bash
-   aws cloudformation deploy \
-     --template-file templates/verify-capture-proxy-preview.yaml \
-     --stack-name verify-capture-proxy \
-     --parameter-overrides AllowedOrigins="https://app.yourcompany.com" \
-     --capabilities CAPABILITY_IAM
-   ```
-2. For development, use `*` (not recommended for production)
-3. Confirm your request includes the `Origin` header
+**Possible causes:**
 
-### 429 — Rate Limited
+| Cause | Resolution |
+|-------|-----------|
+| `mode: intent_only` active | Only workflowId + model metadata are forwarded — no operational context |
+| Required field `workflowId` missing | Every capture request must include `workflowId` |
+| Invalid policy JSON | Check for JSON syntax errors in `CapturePolicyJson` |
+| Policy not loaded | Check CloudWatch logs for `policy_parse_error` |
 
-**Symptom:** Proxy returns HTTP 429 from the Verify API
+**Debug steps:**
+1. Check CloudWatch logs for `policy_applied` events — they show `droppedFields` count
+2. Temporarily switch to `forward_all` mode (set `CapturePolicyJson` to empty string)
+3. Validate your policy JSON with a JSON linter before deploying
 
-**Causes:**
-- Too many requests sent in a short period
-- API rate limit exceeded for your plan
+---
 
-**Resolution:**
-1. Implement exponential backoff in your application
-2. The Verify SDK handles retries automatically — use it as a reference
-3. If sustained, contact Obligra to discuss rate limit adjustments
-4. Consider batching or throttling at the application level
+## Field Missing From Decision Record
 
-### 502 — Proxy Error
+If specific fields don't appear in the retained record, they were likely filtered by your Field Retention Policy.
 
-**Symptom:** Proxy returns `{"error":"proxy_error","message":"Failed to reach Verify API"}`
+**Fields may be:**
 
-**Causes:**
-- Network timeout reaching the Verify API
-- DNS resolution failure
-- Verify API temporarily unavailable
+| Action | What happened |
+|--------|--------------|
+| Dropped | Field was in `security.neverForward` or not in `allowedKeys` with `dropUnknownKeys: true` |
+| Redacted | Field was in `redactedKeys` — name preserved but value removed |
+| Truncated | Field exceeded `maxValueLength` or `maxLength` — value was cut |
 
-**Resolution:**
-1. Check Lambda CloudWatch logs for the error details:
-   ```bash
-   aws logs tail /aws/lambda/verify-capture-proxy-sandbox --since 5m
-   ```
-2. Verify the `VerifyApiBaseUrl` parameter is correct
-3. Test connectivity from your account:
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}" https://verify-console.emergent.host/api/v1/health
-   ```
-4. If the Verify API is down, retry later or contact support
+**This is expected behavior.** The capture policy is working as designed — these fields never left your AWS account.
 
-### 400 — Missing workflowId
+**To include a field:** Add it to `capture.operationalContext.allowedKeys` in your policy JSON.
 
-**Symptom:** Proxy returns `{"error":"missing_workflow_id","message":"workflowId is required"}`
+---
 
-**Cause:** Request body does not contain a `workflowId` field.
+## Wrong AWS Account Deployment
 
-**Resolution:** Ensure your request includes:
-```json
-{
-  "workflowId": "your-workflow-name",
-  "operationalContext": { ... },
-  "model": { "provider": "...", "modelId": "..." }
-}
-```
-
-### 400 — Invalid JSON
-
-**Symptom:** Proxy returns `{"error":"invalid_json"}`
-
-**Cause:** Request body is not valid JSON.
-
-**Resolution:** Check `Content-Type: application/json` header and valid JSON body.
-
-## Debugging
-
-### View Proxy Logs
+**Always verify before any deployment:**
 
 ```bash
-aws logs tail /aws/lambda/verify-capture-proxy-sandbox --since 10m --follow
+aws sts get-caller-identity --profile your-profile
 ```
 
-Logs contain:
-- `action: "forwarded"` — successful relay
-- `action: "rejected"` — validation failure
-- `action: "error"` — upstream failure
-- `workflowId` — which workflow was captured
-- `statusCode` — Verify API response code
-- `durationMs` — round-trip time
+Confirm the `Account` field matches your intended target.
 
-### Check Lambda Configuration
+**Risk:** Deploying to the wrong account creates orphaned resources, may expose your API key to unintended environments, and creates confusion about where captured records are being forwarded from.
+
+**Before every:**
+- `aws cloudformation deploy`
+- `aws cloudformation delete-stack`
+
+Run the identity check first.
+
+---
+
+## CloudFormation Issues
+
+### CAPABILITY_NAMED_IAM Required
+
+The template creates a named IAM role (`verify-capture-proxy-{env}-role`). CloudFormation requires explicit acknowledgment.
+
+**Include in your deploy command:**
+```bash
+--capabilities CAPABILITY_NAMED_IAM
+```
+
+**Without this flag:** CloudFormation will reject the deployment with `CAPABILITY_NAMED_IAM` error.
+
+### Deployment Succeeds But Records Do Not Appear
+
+**Checklist:**
+
+| Step | Check |
+|------|-------|
+| 1 | Stack status is `CREATE_COMPLETE` or `UPDATE_COMPLETE` |
+| 2 | Get the proxy endpoint from stack outputs |
+| 3 | Send a test POST to the endpoint |
+| 4 | Check Lambda CloudWatch logs for the request |
+| 5 | Confirm `statusCode: 201` in the log |
+| 6 | If `statusCode: 401` — API key issue |
+| 7 | If no log entries — API Gateway or Lambda invocation issue |
+
+### Stack Update Fails
+
+- Check the CloudFormation events tab for the specific resource that failed
+- Common: IAM role name conflict if deploying multiple stacks with same `EnvironmentName`
+- Solution: Use unique `EnvironmentName` per stack
+
+### Parameter Override Formatting
+
+For `CapturePolicyJson`, escape JSON properly in the CLI:
 
 ```bash
-aws lambda get-function-configuration \
-  --function-name verify-capture-proxy-sandbox \
-  --query "{Runtime:Runtime,MemorySize:MemorySize,Timeout:Timeout,LastModified:LastModified}"
+--parameter-overrides CapturePolicyJson='{"mode":"policy","capture":{"operationalContext":{"allowedKeys":["ticketId"]}}}'
 ```
 
-### Check Stack Status
-
+Or use a parameter file:
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name verify-capture-proxy \
-  --query "Stacks[0].{Status:StackStatus,Outputs:Outputs}"
+--parameter-overrides file://params.json
 ```
 
-## Getting Help
+---
 
-- General support: contact@obligra.ai
-- Security issues: security@obligra.ai
-- Include your stack name, region, and sanitized error output (no API keys or payloads)
+## CloudWatch Logs Look Empty
+
+**Check:**
+
+| Step | What to verify |
+|------|----------------|
+| Lambda was invoked | Check API Gateway access logs or Lambda invocation metrics |
+| Lambda has log permissions | IAM role must have `logs:CreateLogStream` and `logs:PutLogEvents` |
+| Correct log group | `/aws/lambda/verify-capture-proxy-{EnvironmentName}` |
+| API Gateway route exists | Stack outputs should show `ProxyEndpoint` |
+| Request reached Lambda | Try invoking the Lambda directly via AWS Console |
+
+**Common cause:** The request never reached the Lambda — check that you're calling the correct endpoint URL from the stack outputs.
+
+---
+
+## Verification Issues
+
+**Symptoms:**
+- "Verification unavailable" in the console
+- Verify action fails
+
+**Checklist:**
+
+| Check | Action |
+|-------|--------|
+| Record exists | Confirm the `decisionRecordId` is valid |
+| Correct environment | Verification must happen in the same environment as capture |
+| Workspace access | Your user must have access to the workspace containing the record |
+| Timing | Verification may take a moment after capture — retry after a few seconds |
+
+---
+
+## Direct SDK vs Customer-Owned Proxy
+
+**Direct (Builder pattern):**
+```
+Application → Verify SDK → Verify API
+```
+- Simplest setup — no infrastructure
+- Application holds the API key
+- Developer controls field selection via SDK
+- Best for: evaluation, sandbox, single-developer testing
+
+**Governed (Production/Enterprise pattern):**
+```
+Application → Customer-Owned Proxy → Capture Policy → Verify API
+```
+- API key centralized in the proxy (not in application code)
+- Policy enforced at the boundary — applications cannot bypass field restrictions
+- Auditable by compliance without accessing application source
+- Best for: production, multi-team, governance-required, regulated industries
+
+---
+
+## Prompt / Response Terminology
+
+The Verify platform uses specific field names for AI interaction content.
+
+**Supported:**
+```
+prompt
+response
+```
+
+**Avoid (will be rejected by the SDK):**
+```
+output
+result
+completion
+answer
+generation
+```
+
+Use `prompt` for input to the AI model and `response` for the AI model's output. These terms are consistent across the SDK, proxy, API, and console.
+
+---
+
+## Validation Checklist
+
+After deployment, confirm each step:
+
+| # | Check | How to Verify |
+|---|-------|---------------|
+| 1 | Record created | HTTP 201 + `decisionRecordId` in response |
+| 2 | Record retrieved | Visible in Verify Console or via API GET |
+| 3 | Record verified | Verify action returns `hashMatches: true`, `signatureValid: true` |
+| 4 | Policy works | Allowed fields present, dropped fields absent |
+| 5 | Logs safe | CloudWatch contains no API keys, prompts, responses, or PII |
+
+---
+
+## When to Contact Support
+
+If you've exhausted this guide, contact Obligra support with:
+
+**Include:**
+- `decisionRecordId` (if available)
+- `workflowId`
+- Timestamp of the issue
+- Environment (sandbox/dev/staging/production)
+- Error message or HTTP status code
+- Deployment type (Terraform / CloudFormation / SDK direct)
+
+**Do not send:**
+- API keys or key secrets
+- Bearer tokens or auth credentials
+- Prompt or response content
+- Customer PII or sensitive data
