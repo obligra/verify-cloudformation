@@ -18,8 +18,10 @@ The Verify capture proxy is a lightweight, customer-owned serverless relay that 
 
 | Setting | Value |
 |---|---|
-| Verify API Base URL (preview) | `https://verify-console.emergent.host/api/v1` |
-| Verify API Base URL (production, after cutover) | `https://api.obligra.ai/api/v1` |
+| Verify API Base URL (current preview) | `https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev` |
+| Verify API Base URL (production, after domain cutover) | `https://api.obligra.ai/api/v1` |
+
+> **Note:** The current preview URL is a temporary raw AWS API Gateway endpoint. It will be replaced by `https://api.obligra.ai/api/v1` at production launch. Templates using the default value will need a parameter update at cutover.
 
 ## Available Templates
 
@@ -43,7 +45,7 @@ aws cloudformation deploy \
   --template-file templates/verify-capture-proxy-preview.yaml \
   --stack-name obligra-verify-capture-proxy-test \
   --parameter-overrides \
-    VerifyApiBaseUrl=https://verify-console.emergent.host/api/v1 \
+    VerifyApiBaseUrl=https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev \
     VerifyApiKey=obv_sandbox_YOUR_PREFIX.YOUR_SECRET \
     EnvironmentName=sandbox \
   --capabilities CAPABILITY_NAMED_IAM \

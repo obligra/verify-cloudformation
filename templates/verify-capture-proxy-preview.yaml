@@ -7,11 +7,11 @@ Description: >
 Parameters:
   VerifyApiBaseUrl:
     Type: String
-    Default: https://verify-console.emergent.host/api/v1
+    Default: https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
     Description: >
       Base URL of the Obligra Verify capture API.
-      Preview: https://verify-console.emergent.host/api/v1
-      Production (after cutover): https://api.obligra.ai/api/v1
+      Current preview: https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
+      Production (after domain cutover): https://api.obligra.ai/api/v1
 
   VerifyApiKey:
     Type: String
