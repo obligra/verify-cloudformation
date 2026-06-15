@@ -132,10 +132,12 @@ The template creates:
 
 ## Documentation
 
+- [Customer Integration Reference Architecture](docs/customer-integration-reference-architecture.md)
 - [Deployment Guide](docs/deployment-guide.md)
 - [Architecture](docs/architecture.md)
 - [Security](docs/security.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Validation Summary](docs/cloudformation-validation-summary.md)
 
 ## License
 
