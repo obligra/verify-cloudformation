@@ -177,6 +177,25 @@ The template creates a named IAM role (`verify-capture-proxy-{env}-role`). Cloud
 - Common: IAM role name conflict if deploying multiple stacks with same `EnvironmentName`
 - Solution: Use unique `EnvironmentName` per stack
 
+### Terraform and CloudFormation IAM Role Naming Collisions
+
+When Terraform and CloudFormation deployments coexist in the same AWS account, IAM role names will collide if the same `EnvironmentName` value is used.
+
+Both deployment methods create a role named `verify-capture-proxy-{EnvironmentName}-role`. If Terraform deployed with `EnvironmentName=sandbox`, a CloudFormation stack using the same value will fail with:
+
+```
+The policy CloudWatchLogsOnly already exists on the role verify-capture-proxy-sandbox-role.
+```
+
+**Resolution:** Use a unique `EnvironmentName` for each deployment method.
+
+| Deployment | EnvironmentName | Role Created |
+|------------|----------------|---------------|
+| Terraform | `sandbox` | `verify-capture-proxy-sandbox-role` |
+| CloudFormation | `dev` | `verify-capture-proxy-dev-role` |
+
+This also applies when deploying multiple CloudFormation stacks in the same account — each must use a distinct `EnvironmentName`.
+
 ### Parameter Override Formatting
 
 For `CapturePolicyJson`, escape JSON properly in the CLI:

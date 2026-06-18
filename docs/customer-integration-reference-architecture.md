@@ -190,6 +190,10 @@ These are hosted by Obligra and accessed over HTTPS:
 | Terraform log safety | ✅ Validated (no sensitive data in logs) |
 | Terraform verification | ✅ Validated (hashMatches + signatureValid) |
 | Customer test account (171376498317) | ✅ Validated |
+| CloudFormation customer-account parity (us-east-1) | ✅ Validated |
+| CloudFormation record creation (customer account) | ✅ dr_a9c04f46-516b-4d7c-838e-460d5783397d |
+| CloudFormation record verification (customer account) | ✅ hashMatches + signatureValid |
+| CloudFormation console visibility (customer account) | ✅ Validated |
 
 ## 12. Preview URLs vs Future Production Domains
 

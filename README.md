@@ -293,6 +293,7 @@ This CloudFormation template supports Production, Governance, and Enterprise pat
 | Verification unavailable | Confirm environment and workspace match | [Troubleshooting →](docs/troubleshooting.md#verification-issues) |
 | CloudWatch logs appear empty | Check Lambda invocation and log group | [Troubleshooting →](docs/troubleshooting.md#cloudwatch-logs-look-empty) |
 | CAPABILITY_NAMED_IAM error | Add `--capabilities CAPABILITY_NAMED_IAM` flag | [Troubleshooting →](docs/troubleshooting.md#capability_named_iam-required) |
+| IAM role name collision (TF + CF same account) | Use unique `EnvironmentName` per deployment | [Troubleshooting →](docs/troubleshooting.md#terraform-and-cloudformation-iam-role-naming-collisions) |
 
 ## Validation Checklist
 
