@@ -338,10 +338,9 @@ Removes all resources. No orphaned resources remain.
 
 | Setting | Value |
 |---------|-------|
-| Verify API Base URL (preview) | `https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev` |
-| Verify API Base URL (production) | `https://api.obligra.ai/api/v1` |
+| Verify API Base URL | `https://api.obligra.ai/api/v1` |
 
-The template uses the preview URL as default. A parameter update is required at production domain cutover.
+The template uses the production URL as default.
 
 ## Learn More
 

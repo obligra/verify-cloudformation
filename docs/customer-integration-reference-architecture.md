@@ -195,15 +195,15 @@ These are hosted by Obligra and accessed over HTTPS:
 | CloudFormation record verification (customer account) | ✅ hashMatches + signatureValid |
 | CloudFormation console visibility (customer account) | ✅ Validated |
 
-## 12. Preview URLs vs Future Production Domains
+## 12. Platform URLs
 
-| Purpose | Current Preview | Production (after cutover) |
-|---|---|---|
-| Verify API base URL | `https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev` | `https://api.obligra.ai/api/v1` |
-| Verify Console | `https://verify-console.emergent.host` | `https://console.obligra.ai` |
-| SDK install | `npm install github:obligra/verify-node-sdk` | `npm install @obligra/verify-sdk` |
+| Purpose | URL |
+|---|---|
+| Verify API base URL | `https://api.obligra.ai/api/v1` |
+| Verify Console | `https://console.obligra.ai` |
+| SDK install | `npm install @obligra/verify-sdk` |
 
-Templates use the preview URL as default. A parameter update is required at production domain cutover.
+Templates use the production URL as default.
 
 ## 13. Architecture Diagram
 

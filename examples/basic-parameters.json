@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "VerifyApiBaseUrl",
-    "ParameterValue": "https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev"
+    "ParameterValue": "https://api.obligra.ai/api/v1"
   },
   {
     "ParameterKey": "VerifyApiKey",

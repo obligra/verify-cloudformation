@@ -1,7 +1,7 @@
 variable "verify_api_base_url" {
   type        = string
-  default     = "https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev"
-  description = "Base URL of the Obligra Verify capture API. Production (after domain cutover): https://api.obligra.ai/api/v1"
+  default     = "https://api.obligra.ai/api/v1"
+  description = "Base URL of the Obligra Verify capture API. Example: https://api.obligra.ai/api/v1"
 }
 
 variable "verify_api_key" {

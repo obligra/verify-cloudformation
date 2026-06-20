@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Obligra Verify Capture Proxy (Early Preview).
+  Obligra Verify Capture Proxy.
   Deploys a customer-owned serverless relay with a capture policy engine
   that controls what data leaves the customer account before forwarding
   to the Obligra Verify API.
@@ -8,11 +8,10 @@ Description: >
 Parameters:
   VerifyApiBaseUrl:
     Type: String
-    Default: https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
+    Default: https://api.obligra.ai/api/v1
     Description: >
       Base URL of the Obligra Verify capture API.
-      Current preview: https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
-      Production (after domain cutover): https://api.obligra.ai/api/v1
+      Example: https://api.obligra.ai/api/v1
 
   VerifyApiKey:
     Type: String

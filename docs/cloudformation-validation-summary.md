@@ -13,7 +13,7 @@
 
 | Item | Value |
 |---|---|
-| Account | 970959930193 (Obligra Verify Dev — simulating customer) |
+| Account | Customer AWS account |
 | Region | us-west-2 |
 | Stack name | `obligra-verify-capture-proxy-test` |
 | Template | `templates/verify-capture-proxy-preview.yaml` |
@@ -47,7 +47,7 @@
 |---|---|
 | Lambda Function | `verify-capture-proxy-sandbox` |
 | IAM Role | `verify-capture-proxy-sandbox-role` |
-| API Gateway HTTP API | `https://bpcxi6w0a3.execute-api.us-west-2.amazonaws.com` |
+| API Gateway HTTP API | Customer-deployed proxy endpoint |
 | CloudWatch Log Group | `/aws/lambda/verify-capture-proxy-sandbox` |
 
 ## Captured Record
@@ -64,10 +64,10 @@
 ## Current API Base URL
 
 ```
-https://y1h3onv0f1.execute-api.us-east-1.amazonaws.com/dev
+https://api.obligra.ai/api/v1
 ```
 
-This is a temporary raw AWS API Gateway endpoint used for preview validation only.
+This is the Obligra Verify production API endpoint.
 
 ## Release Note
 
