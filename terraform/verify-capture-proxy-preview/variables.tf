@@ -1,7 +1,7 @@
 variable "verify_api_base_url" {
   type        = string
-  default     = "https://api.obligra.ai/api/v1"
-  description = "Base URL of the Obligra Verify capture API. Example: https://api.obligra.ai/api/v1"
+  default     = "https://api.obligra.ai"
+  description = "Base URL of the Obligra Verify capture API. Example: https://api.obligra.ai"
 }
 
 variable "verify_api_key" {
@@ -21,11 +21,6 @@ variable "environment_name" {
   }
 }
 
-variable "allowed_origins" {
-  type        = string
-  default     = "*"
-  description = "Comma-separated CORS origins. Use '*' for development only. Restrict in production."
-}
 
 variable "log_retention_days" {
   type        = number
@@ -42,4 +37,11 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
   description = "AWS region for deployment."
+}
+
+
+variable "capture_policy_json" {
+  type = string
+  default = "{\"mode\":\"intent_only\"}"
+  description = "JSON capture policy; empty uses intent_only and malformed configuration fails closed."
 }

@@ -1,0 +1,1 @@
+const fs=require('fs'),path=require('path');module.exports=fs.readFileSync(path.join(__dirname,'../templates/verify-capture-proxy-preview.yaml'),'utf8').split('        ZipFile: |\n')[1].split('\n  # ─── CloudWatch')[0].split('\n').map(l=>l.slice(10)).join('\n');
