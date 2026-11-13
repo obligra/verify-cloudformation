@@ -3,9 +3,8 @@
 # Copy this file to terraform.tfvars and set your values.
 # Do not commit terraform.tfvars to version control.
 
-verify_api_base_url = "https://api.obligra.ai/api/v1"
+verify_api_base_url = "https://api.obligra.ai"
 verify_api_key      = "obv_sandbox_YOURPREFIX.YOURSECRETVALUE"
 environment_name    = "sandbox"
 aws_region          = "us-west-2"
-allowed_origins     = "*"
 log_retention_days  = 14

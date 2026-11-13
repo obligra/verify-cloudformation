@@ -41,7 +41,7 @@ variable "aws_region" {
 
 
 variable "capture_policy_json" {
-  type = string
-  default = "{\"mode\":\"intent_only\"}"
+  type        = string
+  default     = "{\"mode\":\"intent_only\"}"
   description = "JSON capture policy; empty uses intent_only and malformed configuration fails closed."
 }

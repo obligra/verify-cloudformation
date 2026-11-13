@@ -75,7 +75,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub 'verify-capture-proxy-${EnvironmentName}'
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Handler: index.handler
       MemorySize: 128
       Timeout: 15
@@ -301,7 +301,3 @@ Outputs:
   CaptureMode:
     Description: Capture mode must be checked in the configured policy, not inferred from deployment success
     Value: inspect-configured-policy
-
-Conditions:
-  HasPolicy: !Not [!Equals [!Ref CapturePolicyJson, '']]
-

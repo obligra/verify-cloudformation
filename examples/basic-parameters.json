@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "VerifyApiBaseUrl",
-    "ParameterValue": "https://api.obligra.ai/api/v1"
+    "ParameterValue": "https://api.obligra.ai"
   },
   {
     "ParameterKey": "VerifyApiKey",
@@ -10,10 +10,6 @@
   {
     "ParameterKey": "EnvironmentName",
     "ParameterValue": "sandbox"
-  },
-  {
-    "ParameterKey": "AllowedOrigins",
-    "ParameterValue": "*"
   },
   {
     "ParameterKey": "LogRetentionDays",
