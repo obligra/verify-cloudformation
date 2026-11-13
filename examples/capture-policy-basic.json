@@ -1,5 +1,4 @@
 {
-  "version": "1.0",
   "mode": "policy",
   "capture": {
     "prompt": {
@@ -15,15 +14,35 @@
       "includeModelId": true
     },
     "operationalContext": {
-      "allowedKeys": ["ticketId", "customerId", "severity", "source", "environment", "outcome", "reviewType", "department"],
-      "redactedKeys": ["internalNotes", "rawPayload", "debugTrace"],
+      "allowedKeys": [
+        "ticketId",
+        "customerId",
+        "severity",
+        "source",
+        "environment",
+        "outcome",
+        "reviewType",
+        "department"
+      ],
+      "redactedKeys": [
+        "internalNotes",
+        "rawPayload",
+        "debugTrace"
+      ],
       "dropUnknownKeys": true,
-      "maxValueLength": 256
+      "maxValueLength": 128
     }
   },
   "security": {
-    "neverForward": ["apiKey", "authToken", "sessionId", "password", "secret", "accessToken", "refreshToken"],
-    "logPayload": false,
+    "neverForward": [
+      "apiKey",
+      "authToken",
+      "sessionId",
+      "password",
+      "secret",
+      "accessToken",
+      "refreshToken"
+    ],
     "logRedactions": true
   }
 }
